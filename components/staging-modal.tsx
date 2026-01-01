@@ -76,6 +76,15 @@ export function StagingModal({
   const target = watch('target');
   const sentence = watch('sentence');
 
+  // Update form when initialData changes (for new entries)
+  useEffect(() => {
+    if (!editingVocab && initialData) {
+      setValue('target', initialData.target || '');
+      setValue('reading', initialData.reading || '');
+      setValue('sentence', initialData.sentence || '');
+    }
+  }, [initialData, editingVocab, setValue]);
+
   // 處理 AI Auto-Fill
   const handleAiFill = async () => {
     if (!target) return;
