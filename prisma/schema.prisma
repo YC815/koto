@@ -5,10 +5,23 @@
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
 generator client {
-  provider = "prisma-client"
+  provider = "prisma-client-js"
   output   = "../app/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
+}
+
+model Vocabulary {
+  id        String   @id @default(cuid())
+  target    String   // 日文單字/片語
+  reading   String   // 假名讀音 (用於 ruby tag 標註)
+  meaning   String   // 日日釋義
+  sentence  String   @default("") // 完整語境例句 (可選)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([target])
+  @@index([createdAt(sort: Desc)])
 }
