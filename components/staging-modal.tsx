@@ -141,12 +141,12 @@ export function StagingModal({
     });
   };
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts (ignore if IME is composing)
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') {
+    if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
       onClose();
     }
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
       handleSubmit(onSubmit)();
     }

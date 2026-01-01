@@ -29,9 +29,9 @@ export function OmniBar({ value, onChange, onEnter, hasResults }: OmniBarProps) 
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Handle Enter key
+  // Handle Enter key (but ignore if IME is composing)
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
       const forceCreate = e.shiftKey || e.metaKey || e.ctrlKey;
       onEnter(forceCreate);
