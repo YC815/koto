@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
 
@@ -13,7 +13,9 @@ type OmniBarProps = {
 
 export function OmniBar({ value, onChange, onEnter, hasResults }: OmniBarProps) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const [showHint, setShowHint] = useState(false);
+
+  // Derived state - no need for useState + useEffect
+  const showHint = hasResults && value.trim().length > 0;
 
   // CMD+K to focus
   useEffect(() => {
@@ -33,18 +35,8 @@ export function OmniBar({ value, onChange, onEnter, hasResults }: OmniBarProps) 
       e.preventDefault();
       const forceCreate = e.shiftKey || e.metaKey || e.ctrlKey;
       onEnter(forceCreate);
-      setShowHint(false);
     }
   };
-
-  // Show hint when has results
-  useEffect(() => {
-    if (hasResults && value.trim().length > 0) {
-      setShowHint(true);
-    } else {
-      setShowHint(false);
-    }
-  }, [hasResults, value]);
 
   return (
     <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b pb-4">
