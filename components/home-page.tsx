@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { OmniBar } from '@/components/omni-bar';
 import { VocabularyList } from '@/components/vocabulary-list';
 import { StagingModal } from '@/components/staging-modal';
-import { parseInput } from '@/lib/parser';
 import type { Vocabulary } from '@/app/generated/prisma';
 
 type HomePageProps = {
@@ -16,9 +15,9 @@ export function HomePage({ initialVocabs }: HomePageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalData, setModalData] = useState<{
-    target: string;
+    content: string;
+    focusedTerm?: string;
     reading?: string;
-    sentence?: string;
   } | null>(null);
   const [editingVocab, setEditingVocab] = useState<Vocabulary | null>(null);
 
@@ -33,29 +32,32 @@ export function HomePage({ initialVocabs }: HomePageProps) {
 
   // Handle Enter in Omni-Bar
   const handleOmniBarEnter = (forceCreate: boolean) => {
-    const parsed = parseInput(searchQuery);
-
     // 情境 A: 無搜尋結果 → 打開 Modal 新增
     // 情境 B: 有結果 + forceCreate → 強制打開 Modal
     // 情境 C: 有結果 + 無 forceCreate → 聚焦第一筆 (編輯)
 
     const hasResults = vocabs.some(
       (v) =>
-        v.target.includes(searchQuery) ||
+        v.content.includes(searchQuery) ||
+        v.focusedTerm.includes(searchQuery) ||
         v.reading.includes(searchQuery) ||
         v.meaning.includes(searchQuery)
     );
 
     if (!hasResults || forceCreate) {
-      // 打開新增 Modal
-      setModalData(parsed);
+      // 打開新增 Modal,將搜尋文字當作 content
+      setModalData({
+        content: searchQuery,
+        focusedTerm: '',
+      });
       setEditingVocab(null);
       setIsModalOpen(true);
     } else {
       // 聚焦第一筆 (進入編輯模式)
       const firstResult = vocabs.find(
         (v) =>
-          v.target.includes(searchQuery) ||
+          v.content.includes(searchQuery) ||
+          v.focusedTerm.includes(searchQuery) ||
           v.reading.includes(searchQuery) ||
           v.meaning.includes(searchQuery)
       );
@@ -83,7 +85,8 @@ export function HomePage({ initialVocabs }: HomePageProps) {
 
   const hasResults = vocabs.some(
     (v) =>
-      v.target.includes(searchQuery) ||
+      v.content.includes(searchQuery) ||
+      v.focusedTerm.includes(searchQuery) ||
       v.reading.includes(searchQuery) ||
       v.meaning.includes(searchQuery)
   );

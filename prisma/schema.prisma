@@ -14,14 +14,15 @@ datasource db {
 }
 
 model Vocabulary {
-  id        String   @id @default(cuid())
-  target    String   // 日文單字/片語
-  reading   String   // 假名讀音 (用於 ruby tag 標註)
-  meaning   String   // 日日釋義
-  sentence  String   @default("") // 完整語境例句 (可選)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  content     String   // 完整內容 (句子/片語/單字/字)
+  focusedTerm String   @default("") // 重點字 (選取的部分,為空則整段都是重點)
+  reading     String   // 假名讀音 (針對 focusedTerm 或 content)
+  meaning     String   // 日日釋義 (針對 focusedTerm 或 content)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  @@index([target])
+  @@index([content])
+  @@index([focusedTerm])
   @@index([createdAt(sort: Desc)])
 }

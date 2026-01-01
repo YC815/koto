@@ -22,7 +22,7 @@ export function VocabularyList({
   const fuse = useMemo(
     () =>
       new Fuse(vocabs, {
-        keys: ['target', 'reading', 'meaning'],
+        keys: ['content', 'focusedTerm', 'reading', 'meaning'],
         threshold: 0.3,
         ignoreLocation: true,
       }),

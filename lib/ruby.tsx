@@ -1,18 +1,21 @@
 import React from 'react';
 
 export function renderWithRuby(
-  sentence: string,
-  target: string,
+  content: string,
+  focusedTerm: string,
   reading: string
 ): React.ReactNode {
-  if (!sentence || !target) return sentence;
+  if (!content) return null;
+
+  // 如果沒有 focusedTerm,整段都是 focusedTerm
+  const target = focusedTerm || content;
 
   // 找到 target 第一次出現位置
-  const index = sentence.indexOf(target);
-  if (index === -1) return sentence;
+  const index = content.indexOf(target);
+  if (index === -1) return content; // 資料異常時的降級處理
 
-  const before = sentence.slice(0, index);
-  const after = sentence.slice(index + target.length);
+  const before = content.slice(0, index);
+  const after = content.slice(index + target.length);
 
   return (
     <>

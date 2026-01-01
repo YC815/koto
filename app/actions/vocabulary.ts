@@ -4,20 +4,20 @@ import { db } from '@/lib/db';
 import { revalidatePath } from 'next/cache';
 
 export type VocabularyInput = {
-  target: string;
+  content: string;
+  focusedTerm?: string;
   reading: string;
   meaning: string;
-  sentence?: string;
 };
 
 export async function createVocab(data: VocabularyInput) {
   try {
     const vocab = await db.vocabulary.create({
       data: {
-        target: data.target,
+        content: data.content,
+        focusedTerm: data.focusedTerm || '',
         reading: data.reading,
         meaning: data.meaning,
-        sentence: data.sentence || '',
       },
     });
     revalidatePath('/');
@@ -33,10 +33,10 @@ export async function updateVocab(id: string, data: VocabularyInput) {
     const vocab = await db.vocabulary.update({
       where: { id },
       data: {
-        target: data.target,
+        content: data.content,
+        focusedTerm: data.focusedTerm || '',
         reading: data.reading,
         meaning: data.meaning,
-        sentence: data.sentence || '',
       },
     });
     revalidatePath('/');

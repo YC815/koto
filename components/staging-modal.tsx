@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useEffect, useState, useTransition, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,16 +14,17 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import { Trash2, Sparkles } from 'lucide-react';
 import { generateEntry } from '@/app/actions/ai';
 import { createVocab, updateVocab, deleteVocab } from '@/app/actions/vocabulary';
 import type { Vocabulary } from '@/app/generated/prisma';
 
 const vocabularySchema = z.object({
-  target: z.string().min(1, '請輸入單字'),
+  content: z.string().min(1, '請輸入內容'),
+  focusedTerm: z.string().optional(),
   reading: z.string().min(1, '請輸入讀音'),
   meaning: z.string().min(1, '請輸入釋義'),
-  sentence: z.string().optional(),
 });
 
 type VocabularyForm = z.infer<typeof vocabularySchema>;
@@ -32,9 +33,9 @@ type StagingModalProps = {
   open: boolean;
   onClose: () => void;
   initialData?: {
-    target: string;
+    content: string;
+    focusedTerm?: string;
     reading?: string;
-    sentence?: string;
   };
   editingVocab?: Vocabulary | null;
 };
@@ -47,6 +48,8 @@ export function StagingModal({
 }: StagingModalProps) {
   const [isPending, startTransition] = useTransition();
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [selectedText, setSelectedText] = useState('');
+  const contentRef = useRef<HTMLTextAreaElement>(null);
   const isEditMode = !!editingVocab;
 
   const {
@@ -60,38 +63,57 @@ export function StagingModal({
     resolver: zodResolver(vocabularySchema),
     defaultValues: editingVocab
       ? {
-          target: editingVocab.target,
+          content: editingVocab.content,
+          focusedTerm: editingVocab.focusedTerm || '',
           reading: editingVocab.reading,
           meaning: editingVocab.meaning,
-          sentence: editingVocab.sentence || '',
         }
       : {
-          target: initialData?.target || '',
+          content: initialData?.content || '',
+          focusedTerm: initialData?.focusedTerm || '',
           reading: initialData?.reading || '',
           meaning: '',
-          sentence: initialData?.sentence || '',
         },
   });
 
-  const target = watch('target');
-  const sentence = watch('sentence');
+  const content = watch('content');
 
   // Update form when initialData changes (for new entries)
   useEffect(() => {
     if (!editingVocab && initialData) {
-      setValue('target', initialData.target || '');
+      setValue('content', initialData.content || '');
+      setValue('focusedTerm', initialData.focusedTerm || '');
       setValue('reading', initialData.reading || '');
-      setValue('sentence', initialData.sentence || '');
     }
   }, [initialData, editingVocab, setValue]);
 
+  // 監聽文字選取
+  const handleTextSelect = () => {
+    if (!contentRef.current) return;
+
+    const start = contentRef.current.selectionStart;
+    const end = contentRef.current.selectionEnd;
+    const selected = content.substring(start, end);
+
+    if (selected.trim()) {
+      setSelectedText(selected.trim());
+      setValue('focusedTerm', selected.trim());
+    } else {
+      setSelectedText('');
+      setValue('focusedTerm', '');
+    }
+  };
+
   // 處理 AI Auto-Fill
   const handleAiFill = async () => {
-    if (!target) return;
+    const currentContent = watch('content');
+    const currentFocused = watch('focusedTerm');
+
+    if (!currentContent) return;
 
     setIsAiLoading(true);
     try {
-      const result = await generateEntry(target, sentence);
+      const result = await generateEntry(currentContent, currentFocused);
       if (result.success && result.data) {
         setValue('reading', result.data.reading);
         setValue('meaning', result.data.meaning);
@@ -112,17 +134,17 @@ export function StagingModal({
       try {
         if (isEditMode && editingVocab) {
           await updateVocab(editingVocab.id, {
-            target: data.target,
+            content: data.content,
+            focusedTerm: data.focusedTerm,
             reading: data.reading,
             meaning: data.meaning,
-            sentence: data.sentence,
           });
         } else {
           await createVocab({
-            target: data.target,
+            content: data.content,
+            focusedTerm: data.focusedTerm,
             reading: data.reading,
             meaning: data.meaning,
-            sentence: data.sentence,
           });
         }
         reset();
@@ -176,42 +198,47 @@ export function StagingModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {/* Sentence Preview (如果有的話) */}
-          {sentence && (
-            <div className="bg-accent/30 p-3 rounded-md">
-              <Label className="text-xs text-muted-foreground">例句</Label>
-              <p className="text-sm mt-1">
-                {sentence.split(target).map((part, i, arr) => (
-                  <span key={i}>
-                    {part}
-                    {i < arr.length - 1 && (
-                      <span className="bg-primary/20 text-primary font-bold px-1 rounded">
-                        {target}
-                      </span>
-                    )}
-                  </span>
-                ))}
-              </p>
-            </div>
-          )}
-
-          {/* Target */}
+          {/* 完整內容 */}
           <div>
-            <Label htmlFor="target">單字</Label>
-            <Input
-              id="target"
-              {...register('target')}
-              placeholder="例: 春"
+            <Label htmlFor="content">完整內容</Label>
+            <Textarea
+              id="content"
+              ref={contentRef}
+              {...register('content')}
+              onSelect={handleTextSelect}
+              placeholder="貼上句子、片語或單字..."
+              className="min-h-20"
               autoFocus={!isEditMode}
             />
-            {errors.target && (
-              <p className="text-xs text-destructive mt-1">{errors.target.message}</p>
+            {selectedText && (
+              <div className="mt-2 text-xs text-muted-foreground">
+                已選取重點字: <span className="text-primary font-bold">{selectedText}</span>
+              </div>
+            )}
+            {errors.content && (
+              <p className="text-xs text-destructive mt-1">{errors.content.message}</p>
             )}
           </div>
 
-          {/* Reading */}
+          {/* 隱藏的 focusedTerm */}
+          <input type="hidden" {...register('focusedTerm')} />
+
+          {/* 讀音 + AI 按鈕 */}
           <div>
-            <Label htmlFor="reading">讀音</Label>
+            <div className="flex items-center justify-between mb-2">
+              <Label htmlFor="reading">讀音</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={handleAiFill}
+                disabled={!content || isAiLoading}
+                className="h-7 text-xs"
+              >
+                <Sparkles className="h-3 w-3 mr-1" />
+                {isAiLoading ? '生成中...' : 'AI 填寫'}
+              </Button>
+            </div>
             <Input
               id="reading"
               {...register('reading')}
@@ -222,37 +249,19 @@ export function StagingModal({
             )}
           </div>
 
-          {/* Meaning */}
+          {/* 釋義 */}
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="meaning">釋義 (日日)</Label>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={handleAiFill}
-                disabled={!target || isAiLoading}
-                className="h-7 text-xs"
-              >
-                <Sparkles className="h-3 w-3 mr-1" />
-                {isAiLoading ? '生成中...' : 'AI 填寫'}
-              </Button>
-            </div>
-            <textarea
+            <Label htmlFor="meaning">釋義 (日日)</Label>
+            <Textarea
               id="meaning"
               {...register('meaning')}
               placeholder="例: 季節の一つで、冬の次、夏の前の暖かい時期"
-              className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              className="min-h-20"
             />
             {errors.meaning && (
               <p className="text-xs text-destructive mt-1">{errors.meaning.message}</p>
             )}
           </div>
-
-          {/* Sentence (hidden input for editing) */}
-          {!isEditMode && (
-            <input type="hidden" {...register('sentence')} />
-          )}
 
           <DialogFooter className="flex justify-between items-center">
             {isEditMode && (
