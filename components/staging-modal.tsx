@@ -1,9 +1,6 @@
 'use client';
 
-import { useEffect, useState, useTransition, useRef } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
+import { useEffect, useState, useTransition } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -12,22 +9,14 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { FuriganaEditor } from '@/components/furigana-editor';
 import { Trash2, Sparkles } from 'lucide-react';
 import { generateEntry } from '@/app/actions/ai';
 import { createVocab, updateVocab, deleteVocab } from '@/app/actions/vocabulary';
 import type { Vocabulary } from '@/app/generated/prisma';
-
-const vocabularySchema = z.object({
-  content: z.string().min(1, '請輸入內容'),
-  focusedTerm: z.string().optional(),
-  reading: z.string().min(1, '請輸入讀音'),
-  meaning: z.string().min(1, '請輸入釋義'),
-});
-
-type VocabularyForm = z.infer<typeof vocabularySchema>;
+import type { FuriganaToken } from '@/lib/types';
 
 type StagingModalProps = {
   open: boolean;
@@ -35,7 +24,6 @@ type StagingModalProps = {
   initialData?: {
     content: string;
     focusedTerm?: string;
-    reading?: string;
   };
   editingVocab?: Vocabulary | null;
 };
@@ -48,75 +36,75 @@ export function StagingModal({
 }: StagingModalProps) {
   const [isPending, startTransition] = useTransition();
   const [isAiLoading, setIsAiLoading] = useState(false);
-  const [selectedText, setSelectedText] = useState('');
-  const contentRef = useRef<HTMLTextAreaElement>(null);
+
+  // State
+  const [content, setContent] = useState('');
+  const [focusedTerm, setFocusedTerm] = useState('');
+  const [tokens, setTokens] = useState<FuriganaToken[]>([]);
+  const [meaning, setMeaning] = useState('');
+
   const isEditMode = !!editingVocab;
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors },
-  } = useForm<VocabularyForm>({
-    resolver: zodResolver(vocabularySchema),
-    defaultValues: editingVocab
-      ? {
-          content: editingVocab.content,
-          focusedTerm: editingVocab.focusedTerm || '',
-          reading: editingVocab.reading,
-          meaning: editingVocab.meaning,
-        }
-      : {
-          content: initialData?.content || '',
-          focusedTerm: initialData?.focusedTerm || '',
-          reading: initialData?.reading || '',
-          meaning: '',
-        },
-  });
-
-  const content = watch('content');
-
-  // Update form when initialData changes (for new entries)
+  // 初始化 state (新增模式)
   useEffect(() => {
-    if (!editingVocab && initialData) {
-      setValue('content', initialData.content || '');
-      setValue('focusedTerm', initialData.focusedTerm || '');
-      setValue('reading', initialData.reading || '');
+    if (!open) {
+      // Modal 關閉時重置
+      setContent('');
+      setFocusedTerm('');
+      setTokens([]);
+      setMeaning('');
+      return;
     }
-  }, [initialData, editingVocab, setValue]);
 
-  // 監聽文字選取
-  const handleTextSelect = () => {
-    if (!contentRef.current) return;
+    if (editingVocab) {
+      // 編輯模式: 載入既有資料
+      setContent(editingVocab.content);
+      setFocusedTerm(editingVocab.focusedTerm || '');
+      setMeaning(editingVocab.meaning);
 
-    const start = contentRef.current.selectionStart;
-    const end = contentRef.current.selectionEnd;
-    const selected = content.substring(start, end);
+      // 解析 reading JSON
+      try {
+        const parsedTokens = JSON.parse(editingVocab.reading);
+        if (Array.isArray(parsedTokens)) {
+          setTokens(parsedTokens);
+        } else {
+          setTokens([]);
+        }
+      } catch {
+        // 舊格式 (純文字): 留空，提示使用者點 AI 填寫
+        setTokens([]);
+      }
+    } else if (initialData) {
+      // 新增模式 + 有初始資料
+      setContent(initialData.content || '');
+      setFocusedTerm(initialData.focusedTerm || '');
+      setTokens([]);
+      setMeaning('');
+    }
+  }, [open, editingVocab, initialData]);
 
+  // 處理 Textarea 選取
+  const handleTextSelect = (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
+    const target = e.target as HTMLTextAreaElement;
+    const selected = target.value.substring(
+      target.selectionStart,
+      target.selectionEnd
+    );
     if (selected.trim()) {
-      setSelectedText(selected.trim());
-      setValue('focusedTerm', selected.trim());
-    } else {
-      setSelectedText('');
-      setValue('focusedTerm', '');
+      setFocusedTerm(selected);
     }
   };
 
   // 處理 AI Auto-Fill
   const handleAiFill = async () => {
-    const currentContent = watch('content');
-    const currentFocused = watch('focusedTerm');
-
-    if (!currentContent) return;
+    if (!content) return;
 
     setIsAiLoading(true);
     try {
-      const result = await generateEntry(currentContent, currentFocused);
+      const result = await generateEntry(content, focusedTerm);
       if (result.success && result.data) {
-        setValue('reading', result.data.reading);
-        setValue('meaning', result.data.meaning);
+        setTokens(result.data.reading);
+        setMeaning(result.data.meaning);
       } else {
         alert('AI 生成失敗，請手動輸入');
       }
@@ -129,25 +117,38 @@ export function StagingModal({
   };
 
   // 提交表單
-  const onSubmit = (data: VocabularyForm) => {
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // 驗證
+    if (!content.trim()) {
+      alert('請輸入內容');
+      return;
+    }
+    if (tokens.length === 0) {
+      alert('請先點擊「AI 填寫」標注讀音');
+      return;
+    }
+    if (!meaning.trim()) {
+      alert('請輸入釋義');
+      return;
+    }
+
     startTransition(async () => {
       try {
+        const data = {
+          content,
+          focusedTerm,
+          reading: JSON.stringify(tokens),
+          meaning,
+        };
+
         if (isEditMode && editingVocab) {
-          await updateVocab(editingVocab.id, {
-            content: data.content,
-            focusedTerm: data.focusedTerm,
-            reading: data.reading,
-            meaning: data.meaning,
-          });
+          await updateVocab(editingVocab.id, data);
         } else {
-          await createVocab({
-            content: data.content,
-            focusedTerm: data.focusedTerm,
-            reading: data.reading,
-            meaning: data.meaning,
-          });
+          await createVocab(data);
         }
-        reset();
+
         onClose();
       } catch (error) {
         console.error('Failed to save vocabulary:', error);
@@ -172,61 +173,48 @@ export function StagingModal({
     });
   };
 
-  // Keyboard shortcuts (ignore if IME is composing)
+  // Keyboard shortcuts
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape' && !e.nativeEvent.isComposing) {
       onClose();
     }
     if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && !e.nativeEvent.isComposing) {
       e.preventDefault();
-      handleSubmit(onSubmit)();
+      onSubmit(e as unknown as React.FormEvent);
     }
   };
 
-  // Reset form when modal closes
-  useEffect(() => {
-    if (!open) {
-      reset();
-    }
-  }, [open, reset]);
-
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent onKeyDown={handleKeyDown} className="sm:max-w-[500px]">
+      <DialogContent onKeyDown={handleKeyDown} className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>{isEditMode ? '編輯單字' : '新增單字'}</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+        <form onSubmit={onSubmit} className="space-y-4">
           {/* 完整內容 */}
           <div>
             <Label htmlFor="content">完整內容</Label>
             <Textarea
               id="content"
-              ref={contentRef}
-              {...register('content')}
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
               onSelect={handleTextSelect}
-              placeholder="貼上句子、片語或單字..."
+              placeholder="例: 金メダル級"
               className="min-h-20"
               autoFocus={!isEditMode}
             />
-            {selectedText && (
+            {focusedTerm && (
               <div className="mt-2 text-xs text-muted-foreground">
-                已選取重點字: <span className="text-primary font-bold">{selectedText}</span>
+                已選取重點字: <span className="text-primary font-bold">{focusedTerm}</span>
               </div>
-            )}
-            {errors.content && (
-              <p className="text-xs text-destructive mt-1">{errors.content.message}</p>
             )}
           </div>
 
-          {/* 隱藏的 focusedTerm */}
-          <input type="hidden" {...register('focusedTerm')} />
-
-          {/* 讀音 + AI 按鈕 */}
+          {/* 讀音標注 */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <Label htmlFor="reading">讀音</Label>
+              <Label>讀音標注</Label>
               <Button
                 type="button"
                 size="sm"
@@ -239,14 +227,8 @@ export function StagingModal({
                 {isAiLoading ? '生成中...' : 'AI 填寫'}
               </Button>
             </div>
-            <Input
-              id="reading"
-              {...register('reading')}
-              placeholder="例: はる"
-            />
-            {errors.reading && (
-              <p className="text-xs text-destructive mt-1">{errors.reading.message}</p>
-            )}
+
+            <FuriganaEditor tokens={tokens} onChange={setTokens} />
           </div>
 
           {/* 釋義 */}
@@ -254,13 +236,11 @@ export function StagingModal({
             <Label htmlFor="meaning">釋義 (日日)</Label>
             <Textarea
               id="meaning"
-              {...register('meaning')}
-              placeholder="例: 季節の一つで、冬の次、夏の前の暖かい時期"
+              value={meaning}
+              onChange={(e) => setMeaning(e.target.value)}
+              placeholder="例: 金メダルを取るくらい、とてもすごいという意味。"
               className="min-h-20"
             />
-            {errors.meaning && (
-              <p className="text-xs text-destructive mt-1">{errors.meaning.message}</p>
-            )}
           </div>
 
           <DialogFooter className="flex justify-between items-center">

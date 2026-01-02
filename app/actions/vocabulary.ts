@@ -6,7 +6,7 @@ import { revalidatePath } from 'next/cache';
 export type VocabularyInput = {
   content: string;
   focusedTerm?: string;
-  reading: string;
+  reading: string; // JSON 字串格式
   meaning: string;
 };
 
@@ -16,7 +16,7 @@ export async function createVocab(data: VocabularyInput) {
       data: {
         content: data.content,
         focusedTerm: data.focusedTerm || '',
-        reading: data.reading,
+        reading: data.reading, // 已經是 JSON 字串
         meaning: data.meaning,
       },
     });
@@ -35,7 +35,7 @@ export async function updateVocab(id: string, data: VocabularyInput) {
       data: {
         content: data.content,
         focusedTerm: data.focusedTerm || '',
-        reading: data.reading,
+        reading: data.reading, // 已經是 JSON 字串
         meaning: data.meaning,
       },
     });

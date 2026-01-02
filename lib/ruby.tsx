@@ -1,4 +1,5 @@
 import React from 'react';
+import type { FuriganaToken } from './types';
 
 export function renderWithRuby(
   content: string,
@@ -17,6 +18,34 @@ export function renderWithRuby(
   const before = content.slice(0, index);
   const after = content.slice(index + target.length);
 
+  // 嘗試解析為新格式 (FuriganaToken[])
+  try {
+    const tokens: FuriganaToken[] = JSON.parse(reading);
+    if (Array.isArray(tokens) && tokens.length > 0) {
+      return (
+        <>
+          {before}
+          {tokens.map((token, i) =>
+            token.furigana ? (
+              <ruby key={i} className="text-primary font-bold">
+                {token.text}
+                <rt className="text-xs">{token.furigana}</rt>
+              </ruby>
+            ) : (
+              <span key={i} className="text-primary font-bold">
+                {token.text}
+              </span>
+            )
+          )}
+          {after}
+        </>
+      );
+    }
+  } catch {
+    // Fallback to old format (不拋出錯誤,靜默降級)
+  }
+
+  // 舊格式 (保持不變,向後相容)
   return (
     <>
       {before}
